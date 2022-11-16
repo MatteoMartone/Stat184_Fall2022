@@ -1,0 +1,218 @@
+---
+title: "Activity 9"
+author: "Matteo Martone with Xiao Lei"
+date: "2022-11-11"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+## Activity 9
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  fig.align = 'center'
+)
+
+#Load Packages 
+library(rvest)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(mlbplotR)
+library(ggpubr)
+library(tidyr)
+
+```
+
+```{r install, eval = FALSE}
+#install trackdown
+
+devtools::install_github(
+repo = "claudiozandonella/trackdown",
+build_vignettes = TRUE
+)
+
+```
+
+```{r upload, eval = FALSE}
+#upload 
+
+trackdown::upload_file(
+file = "Matteo-Activity9.Rmd",
+hide_code = TRUE,
+rich_text = TRUE,
+path_output = "Matteo-Activity9.pdf"
+)
+
+```
+
+```{r MLB logos, include = FALSE}
+# Load MLB logos from GitHub
+teams_colors_logos <- mlbplotR::load_mlb_teams() |> 
+  dplyr::filter(!team_abbr %in% c("AL", "NL", "MLB")) |> 
+  dplyr::mutate(
+    a = rep(1:6, 5),
+    b = sort(rep(1:5, 6), decreasing = TRUE),
+    alpha = ifelse(grepl("A", team_abbr), 1, 0.75), # Keep alpha == 1 for teams that have an "A"
+    color = ifelse(grepl("E", team_abbr), "b/w", NA) # Set teams that have an "E" to black & white
+  )
+
+
+ggplot2::ggplot(teams_colors_logos, aes(x = a, y = b)) +
+  mlbplotR::geom_mlb_logos(aes(team_abbr = team_abbr, color = color, alpha = alpha), width = 0.075) +
+  ggplot2::geom_label(aes(label = team_abbr), nudge_y = -0.35, alpha = 0.5) +
+  ggplot2::scale_color_identity() +
+  ggplot2::scale_alpha_identity() +
+  ggplot2::theme_void() 
+```
+
+```{r MLB Stats }
+
+#load MLB pitching stat leaders
+espnMLBpitching <- read_html(
+  x = "https://www.espn.com/mlb/stats/team/_/view/pitching/season/2022/seasontype/2/table/pitching/sort/wins/dir/desc"
+) %>%
+  html_elements(css = "table") %>%
+  html_table()
+
+#load MLB batting stats leaders 
+espnMLBbatting <- read_html(
+  x = "https://www.espn.com/mlb/stats/team/_/season/2022/seasontype/2"
+) %>%
+  html_elements(css = "table") %>%
+  html_table()
+
+
+# Bind columns within table 
+MLBpitching <- bind_cols(espnMLBpitching[[1]], espnMLBpitching[[2]])
+MLBbatting <- bind_cols(espnMLBbatting[[1]], espnMLBbatting[[2]])
+
+
+# Join batting and pitching tables 
+MLBstats <- full_join(
+  x = MLBpitching,
+  y = MLBbatting,
+  by = c("Team" = "Team")
+)
+
+
+# Join build plot 
+MLBstats <- inner_join(
+  x = MLBstats,
+  y = teams_colors_logos[, c(1,4)],
+  by = c("Team" = "team_name")
+)
+
+# change hits from Chr to Num
+MLBstats2 <- MLBstats %>% mutate(H.y = parse_number(H.y))
+
+# HR plot
+HR <- ggplot(MLBstats2) +
+  aes(x = W, y = HR.y) +
+  geom_mlb_logos(mapping = aes(team_abbr = team_abbr), width = 0.050) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Wins",
+    y = "Homeruns",
+    title = "MLB Wins Comparison",
+    subtitle = "Wins vs Homeruns"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14L,
+                              face = "bold"),
+    plot.subtitle = element_text(size = 10L,
+                                 face = "italic")
+  ) +
+  scale_y_continuous(
+    limits = c(100, 275),
+    breaks = seq(100, 275, 25),
+    expand = expansion(mult = 0, add = 0)
+  )
+
+
+# Hits Plot
+Hits <- ggplot(MLBstats2) +
+  aes(x = W, y = H.y) +
+  geom_mlb_logos(mapping = aes(team_abbr = team_abbr), width = 0.050) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Wins",
+    y = "Hits",
+    subtitle = "Wins vs Hits"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14L,
+                              face = "bold"),
+    plot.subtitle = element_text(size = 10L,
+                                 face = "italic")
+  ) +
+  scale_y_continuous(
+    limits = c(1100, 1500),
+    breaks = seq(1100, 1500, 50),
+    expand = expansion(mult = 0, add = 0)
+  )
+
+# AVG Plot
+AVG <- ggplot(MLBstats2) +
+  aes(x = W, y = AVG) +
+  geom_mlb_logos(
+    mapping = aes(team_abbr = team_abbr),
+    width = 0.050
+  ) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Wins",
+    y = "Batting AVG",
+    subtitle = "Wins vs Batting Average (AVG)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14L,
+                              face = "bold"),
+    plot.subtitle = element_text(size = 10L,
+                                 face = "italic")
+  ) +
+  scale_y_continuous(
+    limits = c(0.21, 0.27),
+    breaks = seq(.2, .3, .005),
+    expand = expansion(mult = 0, add = 0)
+  )
+
+# ERA plot
+ERA <- ggplot(MLBstats2) +
+  aes(x = W, y = ERA) +
+  geom_mlb_logos(
+    mapping = aes(team_abbr = team_abbr),
+    width = 0.050
+  ) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Wins",
+    y = "ERA",
+    subtitle = "Wins vs Earned-Run-Average (ERA)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14L,
+                              face = "bold"),
+    plot.subtitle = element_text(size = 10L,
+                                 face = "italic")
+  ) +
+  scale_y_continuous(
+    limits = c(2.75,5.25),
+    breaks = seq(2.75, 5.25, .25),
+    expand = expansion(mult = 0, add = 0)
+  )
+
+# Join 4 visualizations onto one page
+ggarrange(HR, Hits, AVG, ERA) + rremove("x.text")
+```
+
+## 
